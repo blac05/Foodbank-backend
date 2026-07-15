@@ -30,6 +30,9 @@ const userSchema = new mongoose.Schema(
     // Volunteer-specific
     vehicleType: { type: String, enum: ["car", "bike", "on_foot", "van"], default: "car" },
     impactStats: { type: impactStatsSchema, default: () => ({}) },
+    // Hash of the current valid refresh token (single active session per user for now;
+    // rotate on every refresh, clear on logout, so a stolen token can't be reused indefinitely).
+    refreshTokenHash: { type: String, select: false },
   },
   { timestamps: true }
 );

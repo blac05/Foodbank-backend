@@ -1,28 +1,43 @@
 import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import User from "../models/User.js";
+import { logger } from "../utils/logger.js";
 
-function signToken(user) {
+const ACCESS_TOKEN_EXPIRY = "15m";
+const REFRESH_TOKEN_EXPIRY = "30d";
+
+function signAccessToken(user) {
   return jwt.sign(
     { id: user._id, role: user.role, fullName: user.fullName },
     process.env.JWT_SECRET,
-    { expiresIn: "7d" }
+    { expiresIn: ACCESS_TOKEN_EXPIRY }
   );
+}
+
+function signRefreshToken(user) {
+  return jwt.sign({ id: user._id }, process.env.REFRESH_TOKEN_SECRET, {
+    expiresIn: REFRESH_TOKEN_EXPIRY,
+  });
+}
+
+async function issueTokenPair(user) {
+  const accessToken = signAccessToken(user);
+  const refreshToken = signRefreshToken(user);
+  user.refreshTokenHash = await bcrypt.hash(refreshToken, 10);
+  await user.save();
+  return { accessToken, refreshToken };
 }
 
 function sanitize(user) {
   const obj = user.toObject();
   delete obj.password;
+  delete obj.refreshTokenHash;
   return obj;
 }
 
 export async function signup(req, res) {
   try {
     const { fullName, email, password, role, ...rest } = req.body;
-
-    if (!fullName || !email || !password || !role) {
-      return res.status(400).json({ message: "fullName, email, password, and role are required" });
-    }
 
     const existing = await User.findOne({ email: email.toLowerCase() });
     if (existing) {
@@ -38,10 +53,10 @@ export async function signup(req, res) {
       ...rest,
     });
 
-    const token = signToken(user);
-    res.status(201).json({ token, user: sanitize(user) });
+    const { accessToken, refreshToken } = await issueTokenPair(user);
+    res.status(201).json({ accessToken, refreshToken, user: sanitize(user) });
   } catch (err) {
-    console.error("[signup]", err.message);
+    logger.error({ err }, "signup failed");
     res.status(500).json({ message: "Signup failed" });
   }
 }
@@ -49,9 +64,6 @@ export async function signup(req, res) {
 export async function login(req, res) {
   try {
     const { email, password } = req.body;
-    if (!email || !password) {
-      return res.status(400).json({ message: "Email and password are required" });
-    }
 
     const user = await User.findOne({ email: email.toLowerCase() });
     if (!user) {
@@ -63,11 +75,52 @@ export async function login(req, res) {
       return res.status(401).json({ message: "Invalid email or password" });
     }
 
-    const token = signToken(user);
-    res.json({ token, user: sanitize(user) });
+    const { accessToken, refreshToken } = await issueTokenPair(user);
+    res.json({ accessToken, refreshToken, user: sanitize(user) });
   } catch (err) {
-    console.error("[login]", err.message);
+    logger.error({ err }, "login failed");
     res.status(500).json({ message: "Login failed" });
+  }
+}
+
+// Exchanges a valid, unexpired refresh token for a new access token, and
+// rotates the refresh token itself so a leaked one can't be replayed forever.
+export async function refresh(req, res) {
+  try {
+    const { refreshToken } = req.body;
+
+    let payload;
+    try {
+      payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    } catch {
+      return res.status(401).json({ message: "Refresh token is invalid or expired" });
+    }
+
+    const user = await User.findById(payload.id).select("+refreshTokenHash");
+    if (!user || !user.refreshTokenHash) {
+      return res.status(401).json({ message: "Session no longer valid — please log in again" });
+    }
+
+    const matches = await bcrypt.compare(refreshToken, user.refreshTokenHash);
+    if (!matches) {
+      return res.status(401).json({ message: "Session no longer valid — please log in again" });
+    }
+
+    const tokens = await issueTokenPair(user);
+    res.json({ ...tokens, user: sanitize(user) });
+  } catch (err) {
+    logger.error({ err }, "refresh failed");
+    res.status(500).json({ message: "Failed to refresh session" });
+  }
+}
+
+export async function logout(req, res) {
+  try {
+    await User.findByIdAndUpdate(req.user.id, { $unset: { refreshTokenHash: 1 } });
+    res.json({ message: "Logged out" });
+  } catch (err) {
+    logger.error({ err }, "logout failed");
+    res.status(500).json({ message: "Failed to log out" });
   }
 }
 
