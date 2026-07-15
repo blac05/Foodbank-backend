@@ -13,7 +13,7 @@ const router = Router();
 router.post("/", requireAuth, requireRole("donor"), createDonation);
 router.get("/mine", requireAuth, requireRole("donor"), listMyDonations);
 router.get("/available", requireAuth, requireRole("volunteer", "admin"), listAvailableDonations);
-router.get("/shop", listShopInventory);
+router.get("/shop", listShopInventory); // public browsing, checkout requires auth
 router.patch("/:id/status", requireAuth, updateDonationStatus);
 
 export default router;

@@ -35,7 +35,7 @@ export async function acceptMission(req, res) {
 }
 
 export async function updateMissionStatus(req, res) {
-  const { status } = req.body;
+  const { status } = req.body; // picked_up | delivered
   const mission = await Mission.findById(req.params.id);
   if (!mission) return res.status(404).json({ message: "Mission not found" });
 

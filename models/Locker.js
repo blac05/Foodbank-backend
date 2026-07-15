@@ -8,7 +8,7 @@ const lockerSchema = new mongoose.Schema(
     status: { type: String, enum: ["available", "occupied", "maintenance"], default: "available" },
     currentDonation: { type: mongoose.Schema.Types.ObjectId, ref: "Donation" },
     reservedForRecipient: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
-    accessCode: { type: String },
+    accessCode: { type: String }, // time-boxed unlock code
     accessCodeExpiresAt: { type: Date },
   },
   { timestamps: true }

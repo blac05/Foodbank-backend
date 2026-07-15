@@ -1,6 +1,7 @@
 import Donation from "../models/Donation.js";
 import Mission from "../models/Mission.js";
 
+// Rough heuristic: sooner expiry + larger quantity = higher urgency
 function computeUrgency(items) {
   const now = Date.now();
   let score = 0;
@@ -32,6 +33,7 @@ export async function createDonation(req, res) {
       urgencyScore,
     });
 
+    // Auto-generate an available mission for volunteers
     const estimatedMeals = items.reduce((sum, i) => sum + (i.quantity || 1), 0);
     await Mission.create({
       donation: donation._id,
@@ -59,6 +61,7 @@ export async function listAvailableDonations(_req, res) {
   res.json({ donations });
 }
 
+// Simplified "shop" feed: items from delivered donations, newest first
 export async function listShopInventory(_req, res) {
   const donations = await Donation.find({ status: "delivered" })
     .sort({ updatedAt: -1 })

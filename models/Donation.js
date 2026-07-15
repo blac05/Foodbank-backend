@@ -23,8 +23,8 @@ const donationSchema = new mongoose.Schema(
       enum: ["listed", "claimed", "in_transit", "delivered", "cancelled"],
       default: "listed",
     },
-    urgencyScore: { type: Number, default: 0 },
-    claimedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" },
+    urgencyScore: { type: Number, default: 0 }, // higher = spoils sooner, rescue first
+    claimedBy: { type: mongoose.Schema.Types.ObjectId, ref: "User" }, // volunteer
     notes: { type: String },
   },
   { timestamps: true }
